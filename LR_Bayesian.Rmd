@@ -50,6 +50,7 @@ head(female)
 is_binary <- sapply(df, function(x) all(x %in% c(0, 1)))
 bin_names <- names(df)[is_binary]
 quant_names <- names(df)[!is_binary]
+quant_names <- quant_names[quant_names != "time"]
 
 df_binary <- df[bin_names]
 # Calculating and plotting the correlation matrix for binary variables
@@ -64,6 +65,35 @@ corrplot(corr_matrix_cont, method = "circle", type = "upper", order = "hclust",
          tl.col = "black", tl.srt = 45)
 
 ```
+```{r}
+y0 <- df[df$DEATH_EVENT == 0,]
+
+# Correctly subset data where DEATH_EVENT == 1
+y1 <- df[df$DEATH_EVENT == 1,]
+
+# Plot histogram for 'time' where DEATH_EVENT == 0
+hist(y0$time, main="Time Distribution for DEATH_EVENT = 0", xlab="Time", col="lightblue")
+
+# Plot histogram for 'time' where DEATH_EVENT == 1
+hist(y1$time, main="Time Distribution for DEATH_EVENT = 1", xlab="Time", col="lightgreen")
+Explanation:
+
+```
+```{r}
+hist(df$age, main="Age Distribution", xlab="Age", col="lightblue")
+death_event_counts <- as.data.frame(table(df$DEATH_EVENT))
+
+# Bar plot using ggplot2
+ggplot(death_event_counts, aes(x = Var1, y = Freq, fill = Var1)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Death Event", y = "Count", title = "Distribution of Death Events") +
+  scale_fill_manual(values = c("lightblue", "lightgreen"), labels = c("Survived", "Died")) +
+  theme_minimal()
+
+```
+
+
+
 ```{r}
 set.seed(42)
 y <- df$DEATH_EVENT
@@ -193,7 +223,7 @@ for (param in continuous_params) {
   # Plot histogram using ggplot2
   p <- ggplot(df, aes(x = value)) +
     geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-    ggtitle(paste("Histogram of", param)) +
+    ggtitle(paste("Histogram of posterior", param)) +
     xlab(param) +
     ylab("Frequency") +
     theme_minimal()
