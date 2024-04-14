@@ -14,11 +14,13 @@ library(scales) # for data scaling
 library(stats) # for logistic regression
 library(rstan) # for Bayesian models
 library(caret) # for data splitting and pre-processing
+library(ggplot2)
 ```
 
 ## Load the dataset
 ```{r read, echo=FALSE}
 df <- read_csv('heart_failure_clinical_records_dataset.csv',show_col_types = FALSE)
+head(df)
 ```
 
 ## Death event
@@ -75,10 +77,10 @@ testX <- test %>% select(-DEATH_EVENT) %>% data.matrix()
 trainY <- train$DEATH_EVENT
 testY <- test$DEATH_EVENT
 
-trainX_scaled <- scale(trainX)
-testX_scaled <- scale(testX, center = attr(trainX_scaled, "scaled:center"), scale = attr(trainX_scaled, "scaled:scale"))
+# trainX_scaled <- scale(trainX)
+# testX_scaled <- scale(testX, center = attr(trainX_scaled, "scaled:center"), scale = attr(trainX_scaled, "scaled:scale"))
 
-model <- glm(trainY ~ trainX_scaled, family = binomial(link = "logit"))
+model <- glm(trainY ~ trainX, family = binomial(link = "logit"))
 summary(model)
 ```
 ```{r}
@@ -90,36 +92,144 @@ accuracy <- mean(predicted_outcomes == testY)
 print(paste("Accuracy:", accuracy))
 ```
 
+
 ```{r}
-# Define Stan model
 stan_model_code <- "
 data {
-  int<lower=0> N;
-  int<lower=0,upper=1> y[N];
-  vector[N] x;
+  int<lower=0> N;                     // Number of observations
+  int<lower=0, upper=1> y[N];         // Binary outcome variable
+  vector[N] age;                      // Continuous predictor
+  vector[N] anaemia;                  // Continuous or binary predictor
+  vector[N] creatinine_phosphokinase; // Continuous predictor
+  vector[N] diabetes;                 // Binary predictor
+  vector[N] ejection_fraction;        // Continuous predictor
+  vector[N] high_blood_pressure;      // Binary predictor
+  vector[N] platelets;                // Continuous predictor
+  vector[N] serum_creatinine;         // Continuous predictor
+  vector[N] serum_sodium;             // Continuous predictor
+  vector[N] sex;                      // Binary predictor
+  vector[N] smoking;                  // Binary predictor
+  vector[N] time;                     // Continuous predictor
 }
 parameters {
-  real alpha;
-  real beta;
+  real alpha;                         // Intercept
+  real beta_age;
+  real beta_anaemia;
+  real beta_cpk;                      // Coefficient for creatinine phosphokinase
+  real beta_diabetes;
+  real beta_ef;                       // Coefficient for ejection fraction
+  real beta_hbp;                      // Coefficient for high blood pressure
+  real beta_platelets;
+  real beta_s_creatinine;             // Coefficient for serum creatinine
+  real beta_s_sodium;                 // Coefficient for serum sodium
+  real beta_sex;
+  real beta_smoking;
+  real beta_time;
 }
 model {
+  // Priors
   alpha ~ normal(0, 10);
-  beta ~ normal(0, 10);
+  beta_age ~ normal(0, 10);
+  beta_anaemia ~ normal(0, 10);
+  beta_cpk ~ normal(0, 10);
+  beta_diabetes ~ normal(0, 10);
+  beta_ef ~ normal(0, 10);
+  beta_hbp ~ normal(0, 10);
+  beta_platelets ~ normal(0, 10);
+  beta_s_creatinine ~ normal(0, 10);
+  beta_s_sodium ~ normal(0, 10);
+  beta_sex ~ normal(0, 10);
+  beta_smoking ~ normal(0, 10);
+  beta_time ~ normal(0, 10);
+  
+  // Likelihood
   for (i in 1:N)
-    y[i] ~ bernoulli_logit(alpha + beta * x[i]);
+    y[i] ~ bernoulli_logit(alpha + beta_age * age[i] + beta_anaemia * anaemia[i] + beta_cpk * creatinine_phosphokinase[i] +
+                           beta_diabetes * diabetes[i] + beta_ef * ejection_fraction[i] + beta_hbp * high_blood_pressure[i] +
+                           beta_platelets * platelets[i] + beta_s_creatinine * serum_creatinine[i] + beta_s_sodium * serum_sodium[i] +
+                           beta_sex * sex[i] + beta_smoking * smoking[i] + beta_time * time[i]);
 }
 "
-
 data_for_stan <- list(
   N = length(y),
   y = as.integer(y),
-  x = as.numeric(df$age)
+  age = as.numeric(df$age),
+  anaemia = as.numeric(df$anaemia),
+  creatinine_phosphokinase = as.numeric(df$creatinine_phosphokinase),
+  diabetes = as.numeric(df$diabetes),
+  ejection_fraction = as.numeric(df$ejection_fraction),
+  high_blood_pressure = as.numeric(df$high_blood_pressure),
+  platelets = as.numeric(df$platelets),
+  serum_creatinine = as.numeric(df$serum_creatinine),
+  serum_sodium = as.numeric(df$serum_sodium),
+  sex = as.numeric(df$sex),
+  smoking = as.numeric(df$smoking),
+  time = as.numeric(df$time)
 )
 
-# Compile and fit the model
 fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 3000, chains = 4, warmup = 1000, seed = 101)
-
 print(fit)
+```
 
+```{r}
+samples <- extract(fit)
+continuous_params <- c("alpha", "beta_age", "beta_cpk", "beta_ef", "beta_platelets", 
+                       "beta_s_sodium", "beta_time")
+
+# Loop through each parameter
+for (param in continuous_params) {
+  # Get samples for the parameter
+  param_samples <- samples[[param]]
+  
+  # Calculate the 95% CI
+  ci <- quantile(param_samples, probs = c(0.025, 0.975))
+  
+  # Print the CI
+  cat("95% CI for", param, ":", ci, "\n")
+  
+  # Create a data frame for ggplot
+  df <- data.frame(value = param_samples)
+  
+  # Plot histogram using ggplot2
+  p <- ggplot(df, aes(x = value)) +
+    geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+    ggtitle(paste("Histogram of", param)) +
+    xlab(param) +
+    ylab("Frequency") +
+    theme_minimal()
+  
+  # Print the plot
+  print(p)
+}
+```
+
+```{r}
+categorical_params <- c("beta_anaemia", "beta_diabetes", "beta_hbp",
+                        "beta_s_creatinine","beta_sex", "beta_smoking")
+
+for (param in categorical_params) {
+  # Get samples for the parameter
+  param_samples <- samples[[param]]
+  
+  # Calculate the 95% CI
+  ci <- quantile(param_samples, probs = c(0.025, 0.975))
+  
+  # Print the CI
+  cat("95% CI for", param, ":", ci, "\n")
+  
+  # Create a data frame for ggplot
+  df <- data.frame(value = param_samples)
+  
+  # Plot histogram using ggplot2
+  p <- ggplot(df, aes(x = value)) +
+    geom_histogram(bins = 100, fill = "lightblue", color = "black") +
+    ggtitle(paste("Histogram of", param)) +
+    xlab(param) +
+    ylab("Frequency") +
+    theme_minimal()
+  
+  # Print the plot
+  print(p)
+}
 ```
 
