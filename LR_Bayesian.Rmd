@@ -30,22 +30,14 @@ df$DEATH_EVENT %>% table()
 ```
 
 ```{r}
+table(df$smoking)
+```
+
+```{r}
 na_counts <- sum(is.na(df))
 na_counts
-
-```
-```{r}
-head(df)
 ```
 
-```{r}
-smoke <- df %>% filter(smoking == 1)
-no_smoke <- df %>% filter(smoking == 0)
-male <- df %>% filter(sex == 1)
-female <- df %>% filter(sex == 0)
-head(female)
-
-```
 ```{r}
 is_binary <- sapply(df, function(x) all(x %in% c(0, 1)))
 bin_names <- names(df)[is_binary]
@@ -65,10 +57,9 @@ corrplot(corr_matrix_cont, method = "circle", type = "upper", order = "hclust",
          tl.col = "black", tl.srt = 45)
 
 ```
+
 ```{r}
 y0 <- df[df$DEATH_EVENT == 0,]
-
-# Correctly subset data where DEATH_EVENT == 1
 y1 <- df[df$DEATH_EVENT == 1,]
 
 # Plot histogram for 'time' where DEATH_EVENT == 0
@@ -76,14 +67,10 @@ hist(y0$time, main="Time Distribution for DEATH_EVENT = 0", xlab="Time", col="li
 
 # Plot histogram for 'time' where DEATH_EVENT == 1
 hist(y1$time, main="Time Distribution for DEATH_EVENT = 1", xlab="Time", col="lightgreen")
-Explanation:
 
-```
-```{r}
 hist(df$age, main="Age Distribution", xlab="Age", col="lightblue")
 death_event_counts <- as.data.frame(table(df$DEATH_EVENT))
 
-# Bar plot using ggplot2
 ggplot(death_event_counts, aes(x = Var1, y = Freq, fill = Var1)) +
   geom_bar(stat = "identity") +
   labs(x = "Death Event", y = "Count", title = "Distribution of Death Events") +
@@ -92,69 +79,46 @@ ggplot(death_event_counts, aes(x = Var1, y = Freq, fill = Var1)) +
 
 ```
 
-
-
 ```{r}
-set.seed(42)
+set.seed(451)
 y <- df$DEATH_EVENT
 X <- df %>% select(-DEATH_EVENT, -time) %>% as.data.frame()
-index <- createDataPartition(y, p = .7, list = FALSE)
-train <- df[index, ]
-test <- df[-index, ]
+X <- X %>% data.matrix()
 
-trainX <- train %>% select(-DEATH_EVENT) %>% data.matrix()
-testX <- test %>% select(-DEATH_EVENT) %>% data.matrix()
-trainY <- train$DEATH_EVENT
-testY <- test$DEATH_EVENT
-
-# trainX_scaled <- scale(trainX)
-# testX_scaled <- scale(testX, center = attr(trainX_scaled, "scaled:center"), scale = attr(trainX_scaled, "scaled:scale"))
-
-model <- glm(trainY ~ trainX, family = binomial(link = "logit"))
+model <- glm(y ~ X, family = binomial(link = "logit"))
 summary(model)
 ```
-```{r}
-# Predict probabilities on the test set
-predicted_probabilities <- predict(model, newdata = as.data.frame(testX_scaled), type = "response")
-predicted_outcomes <- ifelse(predicted_probabilities > 0.5, 1, 0)
-# Calculate accuracy
-accuracy <- mean(predicted_outcomes == testY)
-print(paste("Accuracy:", accuracy))
-```
-
 
 ```{r}
 stan_model_code <- "
 data {
-  int<lower=0> N;                     // Number of observations
-  int<lower=0, upper=1> y[N];         // Binary outcome variable
-  vector[N] age;                      // Continuous predictor
-  vector[N] anaemia;                  // Continuous or binary predictor
-  vector[N] creatinine_phosphokinase; // Continuous predictor
-  vector[N] diabetes;                 // Binary predictor
-  vector[N] ejection_fraction;        // Continuous predictor
-  vector[N] high_blood_pressure;      // Binary predictor
-  vector[N] platelets;                // Continuous predictor
-  vector[N] serum_creatinine;         // Continuous predictor
-  vector[N] serum_sodium;             // Continuous predictor
-  vector[N] sex;                      // Binary predictor
-  vector[N] smoking;                  // Binary predictor
-  vector[N] time;                     // Continuous predictor
+  int<lower=0> N;                   
+  int<lower=0, upper=1> y[N];       
+  vector[N] age;                      
+  vector[N] anaemia;                
+  vector[N] creatinine_phosphokinase;
+  vector[N] diabetes;                 
+  vector[N] ejection_fraction;        
+  vector[N] high_blood_pressure;      
+  vector[N] platelets;                
+  vector[N] serum_creatinine;         
+  vector[N] serum_sodium;           
+  vector[N] sex;                      
+  vector[N] smoking;                  
 }
 parameters {
-  real alpha;                         // Intercept
+  real alpha;                       
   real beta_age;
   real beta_anaemia;
-  real beta_cpk;                      // Coefficient for creatinine phosphokinase
+  real beta_cpk;              
   real beta_diabetes;
-  real beta_ef;                       // Coefficient for ejection fraction
-  real beta_hbp;                      // Coefficient for high blood pressure
+  real beta_ef;                      
+  real beta_hbp;                     
   real beta_platelets;
-  real beta_s_creatinine;             // Coefficient for serum creatinine
-  real beta_s_sodium;                 // Coefficient for serum sodium
+  real beta_s_creatinine;           
+  real beta_s_sodium;                 
   real beta_sex;
   real beta_smoking;
-  real beta_time;
 }
 model {
   // Priors
@@ -170,14 +134,13 @@ model {
   beta_s_sodium ~ normal(0, 10);
   beta_sex ~ normal(0, 10);
   beta_smoking ~ normal(0, 10);
-  beta_time ~ normal(0, 10);
   
   // Likelihood
   for (i in 1:N)
     y[i] ~ bernoulli_logit(alpha + beta_age * age[i] + beta_anaemia * anaemia[i] + beta_cpk * creatinine_phosphokinase[i] +
                            beta_diabetes * diabetes[i] + beta_ef * ejection_fraction[i] + beta_hbp * high_blood_pressure[i] +
                            beta_platelets * platelets[i] + beta_s_creatinine * serum_creatinine[i] + beta_s_sodium * serum_sodium[i] +
-                           beta_sex * sex[i] + beta_smoking * smoking[i] + beta_time * time[i]);
+                           beta_sex * sex[i] + beta_smoking * smoking[i]);
 }
 "
 data_for_stan <- list(
@@ -193,42 +156,34 @@ data_for_stan <- list(
   serum_creatinine = as.numeric(df$serum_creatinine),
   serum_sodium = as.numeric(df$serum_sodium),
   sex = as.numeric(df$sex),
-  smoking = as.numeric(df$smoking),
-  time = as.numeric(df$time)
+  smoking = as.numeric(df$smoking)
 )
 
-fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 3000, chains = 4, warmup = 1000, seed = 101)
+fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 5000, chains = 4, warmup = 1000, seed = 101)
 print(fit)
 ```
 
 ```{r}
 samples <- extract(fit)
 continuous_params <- c("alpha", "beta_age", "beta_cpk", "beta_ef", "beta_platelets", 
-                       "beta_s_sodium", "beta_time")
+                       "beta_s_sodium")
 
-# Loop through each parameter
 for (param in continuous_params) {
   # Get samples for the parameter
   param_samples <- samples[[param]]
   
   # Calculate the 95% CI
   ci <- quantile(param_samples, probs = c(0.025, 0.975))
-  
-  # Print the CI
   cat("95% CI for", param, ":", ci, "\n")
-  
-  # Create a data frame for ggplot
+
   df <- data.frame(value = param_samples)
-  
-  # Plot histogram using ggplot2
   p <- ggplot(df, aes(x = value)) +
     geom_histogram(bins = 30, fill = "lightblue", color = "black") +
     ggtitle(paste("Histogram of posterior", param)) +
     xlab(param) +
     ylab("Frequency") +
     theme_minimal()
-  
-  # Print the plot
+
   print(p)
 }
 ```
@@ -238,28 +193,20 @@ categorical_params <- c("beta_anaemia", "beta_diabetes", "beta_hbp",
                         "beta_s_creatinine","beta_sex", "beta_smoking")
 
 for (param in categorical_params) {
-  # Get samples for the parameter
   param_samples <- samples[[param]]
   
   # Calculate the 95% CI
   ci <- quantile(param_samples, probs = c(0.025, 0.975))
-  
-  # Print the CI
   cat("95% CI for", param, ":", ci, "\n")
   
-  # Create a data frame for ggplot
   df <- data.frame(value = param_samples)
-  
-  # Plot histogram using ggplot2
   p <- ggplot(df, aes(x = value)) +
     geom_histogram(bins = 100, fill = "lightblue", color = "black") +
     ggtitle(paste("Histogram of", param)) +
     xlab(param) +
     ylab("Frequency") +
     theme_minimal()
-  
-  # Print the plot
+
   print(p)
 }
 ```
-
