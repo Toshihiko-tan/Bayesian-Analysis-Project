@@ -159,9 +159,14 @@ data_for_stan <- list(
   smoking = as.numeric(df$smoking)
 )
 
-fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 5000, chains = 4, warmup = 1000, seed = 101)
+fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 10000, chains = 4, warmup = 1000, seed = 101)
 print(fit)
 ```
+
+```{r}
+traceplot(fit)
+```
+
 
 ```{r}
 samples <- extract(fit)
