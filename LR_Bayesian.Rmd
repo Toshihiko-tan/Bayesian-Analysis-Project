@@ -171,7 +171,7 @@ traceplot(fit)
 ```{r}
 samples <- extract(fit)
 continuous_params <- c("alpha", "beta_age", "beta_cpk", "beta_ef", "beta_platelets", 
-                       "beta_s_sodium")
+                        "beta_s_creatinine", "beta_s_sodium")
 
 for (param in continuous_params) {
   # Get samples for the parameter
@@ -195,7 +195,7 @@ for (param in continuous_params) {
 
 ```{r}
 categorical_params <- c("beta_anaemia", "beta_diabetes", "beta_hbp",
-                        "beta_s_creatinine","beta_sex", "beta_smoking")
+                       "beta_sex", "beta_smoking")
 
 for (param in categorical_params) {
   param_samples <- samples[[param]]
