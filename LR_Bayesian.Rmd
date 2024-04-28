@@ -1,83 +1,38 @@
 ---
 title: "LR_Bayesian"
-author: "Wang ZiMing"
+author: ""
 date: "2024-04-07"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse) # for data manipulation and visualization
-library(readr) # for reading data
-library(corrplot) # for correlation plots
-library(scales) # for data scaling
-library(stats) # for logistic regression
-library(rstan) # for Bayesian models
-library(caret) # for data splitting and pre-processing
+library(tidyverse)
+library(readr)
+library(corrplot)
+library(scales)
+library(stats)
+library(rstan)
+library(caret)
 library(ggplot2)
 ```
 
-## Load the dataset
+### Load the dataset
 ```{r read, echo=FALSE}
-df <- read_csv('heart_failure_clinical_records_dataset.csv',show_col_types = FALSE)
-head(df)
+df <- read.csv("/Users/jasper/Desktop/Stats451 Final Project/heart.csv")
 ```
 
-## Death event
-
-```{r}
-df$DEATH_EVENT %>% table()
-```
+### Understand basic info of the dataset
 
 ```{r}
 table(df$smoking)
-```
-
-```{r}
+df$DEATH_EVENT %>% table()
 na_counts <- sum(is.na(df))
 na_counts
+summary(df)
 ```
 
-```{r}
-is_binary <- sapply(df, function(x) all(x %in% c(0, 1)))
-bin_names <- names(df)[is_binary]
-quant_names <- names(df)[!is_binary]
-quant_names <- quant_names[quant_names != "time"]
-
-df_binary <- df[bin_names]
-# Calculating and plotting the correlation matrix for binary variables
-corr_matrix <- cor(df_binary)
-corrplot(corr_matrix, method = "circle", type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
-
-df_quant <- df[quant_names]
-# Calculating and plotting the correlation matrix for continuous variables
-corr_matrix_cont <- cor(df_quant)
-corrplot(corr_matrix_cont, method = "circle", type = "upper", order = "hclust", 
-         tl.col = "black", tl.srt = 45)
-
-```
-
-```{r}
-y0 <- df[df$DEATH_EVENT == 0,]
-y1 <- df[df$DEATH_EVENT == 1,]
-
-# Plot histogram for 'time' where DEATH_EVENT == 0
-hist(y0$time, main="Time Distribution for DEATH_EVENT = 0", xlab="Time", col="lightblue")
-
-# Plot histogram for 'time' where DEATH_EVENT == 1
-hist(y1$time, main="Time Distribution for DEATH_EVENT = 1", xlab="Time", col="lightgreen")
-
-hist(df$age, main="Age Distribution", xlab="Age", col="lightblue")
-death_event_counts <- as.data.frame(table(df$DEATH_EVENT))
-
-ggplot(death_event_counts, aes(x = Var1, y = Freq, fill = Var1)) +
-  geom_bar(stat = "identity") +
-  labs(x = "Death Event", y = "Count", title = "Distribution of Death Events") +
-  scale_fill_manual(values = c("lightblue", "lightgreen"), labels = c("Survived", "Died")) +
-  theme_minimal()
-
-```
+### Fitting Logistic Regression Model
 
 ```{r}
 set.seed(451)
@@ -88,6 +43,8 @@ X <- X %>% data.matrix()
 model <- glm(y ~ X, family = binomial(link = "logit"))
 summary(model)
 ```
+
+### Bayesian Logistic Regression using Stan
 
 ```{r}
 stan_model_code <- "
@@ -163,10 +120,13 @@ fit <- stan(model_code = stan_model_code, data = data_for_stan, iter = 10000, ch
 print(fit)
 ```
 
+### Traceplot
+
 ```{r}
 traceplot(fit)
 ```
 
+### Credible Interval
 
 ```{r}
 samples <- extract(fit)
@@ -174,10 +134,7 @@ continuous_params <- c("alpha", "beta_age", "beta_cpk", "beta_ef", "beta_platele
                         "beta_s_creatinine", "beta_s_sodium")
 
 for (param in continuous_params) {
-  # Get samples for the parameter
   param_samples <- samples[[param]]
-  
-  # Calculate the 95% CI
   ci <- quantile(param_samples, probs = c(0.025, 0.975))
   cat("95% CI for", param, ":", ci, "\n")
 
@@ -199,8 +156,6 @@ categorical_params <- c("beta_anaemia", "beta_diabetes", "beta_hbp",
 
 for (param in categorical_params) {
   param_samples <- samples[[param]]
-  
-  # Calculate the 95% CI
   ci <- quantile(param_samples, probs = c(0.025, 0.975))
   cat("95% CI for", param, ":", ci, "\n")
   
@@ -215,3 +170,173 @@ for (param in categorical_params) {
   print(p)
 }
 ```
+
+
+### EDA
+
+**Time Distribution for each DEATH_EVENT**
+
+```{r}
+y0 <- df[df$DEATH_EVENT == 0,]
+y1 <- df[df$DEATH_EVENT == 1,]
+
+hist(y0$time, main="Time Distribution for DEATH_EVENT = 0", xlab="Time", col="lightblue")
+hist(y1$time, main="Time Distribution for DEATH_EVENT = 1", xlab="Time", col="lightgreen")
+```
+
+**Factor all categorical variables**
+
+```{r, echo = FALSE, include = FALSE}
+df$anaemia <- factor(df$anaemia, levels = c(0, 1), 
+                        labels = c("No anemia", "Anemia"))
+df$diabetes <- factor(df$diabetes, levels = c(0, 1),
+                      labels = c("No diabetes", "Diabetes"))
+df$high_blood_pressure <- factor(df$high_blood_pressure, levels = c(0, 1),
+                                 labels = c("No hbp", "Hbp"))
+df$sex <- factor(df$sex, levels = c(0, 1),
+                 labels = c("Female", "Male"))
+df$smoking <- factor(df$smoking, levels = c(0, 1),
+                     labels = c("No smoking", "Smoking"))
+df$DEATH_EVENT <- factor(df$DEATH_EVENT, levels = c(0, 1),
+                         labels = c("Alive", "Dead"))
+```
+
+**Numerical Variable EDA**
+
+```{r}
+deadYes <- subset(df, DEATH_EVENT == 'Dead')
+
+numerical_Yes=deadYes[ ,c('age','creatinine_phosphokinase','ejection_fraction', 'platelets', 'serum_creatinine', 'serum_sodium')]
+Yes_matrix <- cor(numerical_Yes, use = "complete.obs")
+Yes_matrix <- round(Yes_matrix, 3)
+
+par(cex.main=0.8)
+lhei = c(2, 5)
+heatmap.2(Yes_matrix, dendrogram = 'none',
+          Rowv=NULL, Colv=NULL,
+          trace='none', symm=TRUE,
+          cexRow = 0.75, cexCol=0.75,
+          key = FALSE, srtCol = 30,
+          adjCol = c(0.5, 0.5),
+          srtRow=50, adjRow=c(0.5,0.5),
+          offsetRow = -43,
+          col = colorRampPalette(c("blue", "white", "orange"))(200),
+          margins = c(6.5, 5), lhei= lhei,
+          cellnote = Yes_matrix, notecol = "black",
+          )
+```
+
+```{r}
+deadNo <- subset(df, DEATH_EVENT == 'Alive')
+
+numerical_No=deadNo[ ,c('age','creatinine_phosphokinase','ejection_fraction', 'platelets', 'serum_creatinine', 'serum_sodium')]
+No_matrix <- cor(numerical_No, use = "complete.obs")
+No_matrix <- round(No_matrix, 3)
+
+par(cex.main=0.8)
+lhei = c(2, 5)
+heatmap.2(No_matrix, dendrogram = 'none',
+          Rowv=NULL, Colv=NULL,
+          trace='none', symm=TRUE,
+          cexRow = 0.75, cexCol=0.75,
+          key = FALSE, srtCol = 30,
+          adjCol = c(0.5, 0.5),
+          srtRow=50, adjRow=c(0.5,0.5),
+          offsetRow = -43,
+          col = colorRampPalette(c("blue", "white", "orange"))(200),
+          margins = c(6.5, 5), lhei= lhei,
+          cellnote = No_matrix, notecol = "black",
+          )
+```
+
+**Categorical Variable EDA**
+
+```{r, echo = TRUE, include = FALSE}
+anaemia_de <- df %>% 
+  group_by(anaemia, DEATH_EVENT) %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = count / sum(count))
+
+diabetes_de <- df %>% 
+  group_by(diabetes, DEATH_EVENT) %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = count / sum(count))
+
+hbp_de <- df %>% 
+  group_by(high_blood_pressure, DEATH_EVENT) %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = count / sum(count))
+
+sex_de <- df %>% 
+  group_by(sex, DEATH_EVENT) %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = count / sum(count))
+
+smoking_de <- df %>%
+  group_by(smoking, DEATH_EVENT) %>%
+  summarise(count = n()) %>%
+  mutate(prop = count / sum(count))
+```
+
+```{r, echo = FALSE, include = TRUE, fig.width = 10, fig.height = 8}
+barchart_anaemia <- ggplot(anaemia_de, aes(x = factor(anaemia), y = prop, fill = factor(DEATH_EVENT))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Anemia", y = "Proportion", 
+       title = "Proportion of DE across Anemia") +
+  theme(aspect.ratio = 0.75, plot.title = element_text(size=10),
+        axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("Alive" = "royalblue", "Dead" = "red"), 
+                    name = "Death Event") 
+
+barchart_diabetes <- ggplot(diabetes_de, aes(x = factor(diabetes), y = prop, fill = factor(DEATH_EVENT))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Diabetes", y = "Proportion", 
+       title = "Proportion of DE across Diabetes") +
+  theme(aspect.ratio = 0.75, plot.title = element_text(size=10),
+        axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("Alive" = "seagreen3", "Dead" = "deeppink2"), 
+                    name = "Death Event")
+
+barchart_hbp <- ggplot(hbp_de, aes(x = factor(high_blood_pressure), y = prop, fill = factor(DEATH_EVENT))) +
+  geom_bar(stat = "identity") +
+  labs(x = "High Blood Pressure", y = "Proportion", 
+       title = "Proportion of DE across HBP") +
+  theme(aspect.ratio = 0.75, plot.title = element_text(size=10),
+        axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("Alive" = "slateblue1", "Dead" = "brown1"), 
+                    name = "Death Event")
+
+barchart_sex <- ggplot(sex_de, aes(x = factor(sex), y = prop, fill = factor(DEATH_EVENT))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Sex", y = "Proportion", 
+       title = "Proportion of DE Across Sex") +
+  theme(aspect.ratio = 0.75, plot.title = element_text(size=10),
+        axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("Alive" = "dodgerblue", "Dead" = "coral"), 
+                    name = "Death Event")
+
+barchart_smoking <- ggplot(smoking_de, aes(x = factor(smoking), y = prop, fill = factor(DEATH_EVENT))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Smoking", y = "Proportion", 
+       title = "Proportion of DE Across Smoking") +
+  theme(aspect.ratio = 0.75, plot.title = element_text(size=10),
+        axis.text.x = element_text(angle = 90)) +
+  scale_fill_manual(values = c("Alive" = "dodgerblue", "Dead" = "coral"), 
+                    name = "Death Event")
+
+grid.arrange(barchart_anaemia, barchart_diabetes, barchart_hbp, 
+             barchart_sex, barchart_smoking,
+             ncol = 3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
